@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vNets": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": {
+          "name": "vnet1",
+          "addressPrefixes": ["10.0.1.0/24"],
+          "subnets": [
+            { "name": "subnet1", "addressPrefix": "10.0.1.0/26" },
+            { "name": "subnet2", "addressPrefix": "10.0.1.64/26" },
+            { "name": "GatewaySubnet", "addressPrefix": "10.0.1.192/27" }
+          ]
+        },
+        "vNet2": {
+          "name": "vnet2",
+          "addressPrefixes": ["10.0.2.0/24"],
+          "subnets": [
+            { "name": "subnet1", "addressPrefix": "10.0.2.0/26" },
+            { "name": "subnet2", "addressPrefix": "10.0.2.64/26" },
+            { "name": "GatewaySubnet", "addressPrefix": "10.0.2.192/27" }
+          ]
+        },
+        "vNet3": {
+          "name": "vnet3",
+          "addressPrefixes": ["10.0.3.0/24"],
+          "subnets": [
+            { "name": "subnet1", "addressPrefix": "10.0.3.0/26" },
+            { "name": "subnet2", "addressPrefix": "10.0.3.64/26" },
+            { "name": "GatewaySubnet", "addressPrefix": "10.0.3.192/27" }
+          ]
+        }
+      }
+    },
+    "nsgNames": {
+      "type": "array",
+      "defaultValue": ["nsgmin001", "nsgmin002", "nsgmin003"]
+    },
+    "storageAccountName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "defaultValue": "[toLower(format('st{0}', uniqueString(resourceGroup().id)))]"
+    }
+  },
+  "variables": {
+    "vNetList": [
+      "[parameters('vNets').vNet1]",
+      "[parameters('vNets').vNet2]",
+      "[parameters('vNets').vNet3]"
+    ],
+    "nsgCount": "[length(parameters('nsgNames'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2025-01-01",
+      "name": "[parameters('nsgNames')[copyIndex()]]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "nsgCopy",
+        "count": "[variables('nsgCount')]"
+      },
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2025-01-01",
+      "name": "[variables('vNetList')[copyIndex('vnetCopy')].name]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "vnetCopy",
+        "count": "[length(variables('vNetList'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgNames')[copyIndex('vnetCopy')])]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": "[variables('vNetList')[copyIndex('vnetCopy')].addressPrefixes]"
+        },
+        "subnets": [
+          {
+            "name": "[variables('vNetList')[copyIndex('vnetCopy')].subnets[0].name]",
+            "properties": {
+              "addressPrefix": "[variables('vNetList')[copyIndex('vnetCopy')].subnets[0].addressPrefix]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgNames')[copyIndex('vnetCopy')])]"
+              }
+            }
+          },
+          {
+            "name": "[variables('vNetList')[copyIndex('vnetCopy')].subnets[1].name]",
+            "properties": {
+              "addressPrefix": "[variables('vNetList')[copyIndex('vnetCopy')].subnets[1].addressPrefix]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgNames')[copyIndex('vnetCopy')])]"
+              }
+            }
+          },
+          {
+            "name": "[variables('vNetList')[copyIndex('vnetCopy')].subnets[2].name]",
+            "properties": {
+              "addressPrefix": "[variables('vNetList')[copyIndex('vnetCopy')].subnets[2].addressPrefix]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2025-06-01",
+      "name": "[parameters('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {}
+    }
+  ],
+  "outputs": {
+    "storageAccountId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+    }
+  }
+}
