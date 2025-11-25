@@ -1,0 +1,173 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vNets": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": {
+          "name": "vnet1"
+        },
+        "vNet2": {
+          "name": "vnet2"
+        },
+        "vNet3": {
+          "name": "vnet3"
+        }
+      }
+    },
+    "bgpSettings": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": {
+          "asn": 65010,
+          "bgpPeeringAddress": "169.254.21.1"
+        },
+        "vNet2": {
+          "asn": 65020,
+          "bgpPeeringAddress": "169.254.21.2"
+        },
+        "vNet3": {
+          "asn": 65030,
+          "bgpPeeringAddress": "169.254.21.3"
+        }
+      }
+    },
+    "sharedKey": {
+      "type": "securestring",
+      "defaultValue": "P@ssw0rd!"
+    }
+  },
+  "variables": {
+    "gatewayNames": {
+      "vNet1": "[format('{0}-vng', parameters('vNets').vNet1.name)]",
+      "vNet2": "[format('{0}-vng', parameters('vNets').vNet2.name)]",
+      "vNet3": "[format('{0}-vng', parameters('vNets').vNet3.name)]"
+    },
+    "gatewayConfigs": [
+      {
+        "name": "[variables('gatewayNames').vNet1]",
+        "vnetName": "[parameters('vNets').vNet1.name]",
+        "asn": "[parameters('bgpSettings').vNet1.asn]",
+        "customBgpIp": "[parameters('bgpSettings').vNet1.bgpPeeringAddress]"
+      },
+      {
+        "name": "[variables('gatewayNames').vNet2]",
+        "vnetName": "[parameters('vNets').vNet2.name]",
+        "asn": "[parameters('bgpSettings').vNet2.asn]",
+        "customBgpIp": "[parameters('bgpSettings').vNet2.bgpPeeringAddress]"
+      },
+      {
+        "name": "[variables('gatewayNames').vNet3]",
+        "vnetName": "[parameters('vNets').vNet3.name]",
+        "asn": "[parameters('bgpSettings').vNet3.asn]",
+        "customBgpIp": "[parameters('bgpSettings').vNet3.bgpPeeringAddress]"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworkGateways",
+      "apiVersion": "2025-01-01",
+      "name": "[variables('gatewayConfigs')[copyIndex('vngCopy')].name]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "vngCopy",
+        "count": "[length(variables('gatewayConfigs'))]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "default",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('gatewayConfigs')[copyIndex('vngCopy')].vnetName, 'GatewaySubnet')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-vng-pip', variables('gatewayConfigs')[copyIndex('vngCopy')].vnetName))]"
+              }
+            }
+          }
+        ],
+        "gatewayType": "Vpn",
+        "vpnType": "RouteBased",
+        "activeActive": false,
+        "enableBgp": true,
+        "sku": {
+          "name": "VpnGw2",
+          "tier": "VpnGw2"
+        },
+        "vpnGatewayGeneration": "Generation2",
+        "bgpSettings": {
+          "asn": "[variables('gatewayConfigs')[copyIndex('vngCopy')].asn]",
+          "peerWeight": 0,
+          "bgpPeeringAddresses": [
+            {
+              "ipconfigurationId": "[format('{0}/ipConfigurations/{1}', resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayConfigs')[copyIndex('vngCopy')].name), 'default')]",
+              "customBgpIpAddresses": [
+                "[variables('gatewayConfigs')[copyIndex('vngCopy')].customBgpIp]"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/connections",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-to-{1}', parameters('vNets').vNet1.name, parameters('vNets').vNet2.name)]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet1)]",
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
+      ],
+      "properties": {
+        "virtualNetworkGateway1": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet1)]"
+        },
+        "virtualNetworkGateway2": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
+        },
+        "connectionType": "Vnet2Vnet",
+        "sharedKey": "[parameters('sharedKey')]",
+        "enableBgp": true,
+        "usePolicyBasedTrafficSelectors": false
+      }
+    },
+    {
+      "type": "Microsoft.Network/connections",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-to-{1}', parameters('vNets').vNet3.name, parameters('vNets').vNet2.name)]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet3)]",
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
+      ],
+      "properties": {
+        "virtualNetworkGateway1": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet3)]"
+        },
+        "virtualNetworkGateway2": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
+        },
+        "connectionType": "Vnet2Vnet",
+        "sharedKey": "[parameters('sharedKey')]",
+        "enableBgp": true,
+        "usePolicyBasedTrafficSelectors": false
+      }
+    }
+  ],
+  "outputs": {
+    "connectionIds": {
+      "type": "object",
+      "value": {
+        "vNet1ToVNet2": "[resourceId('Microsoft.Network/connections', format('{0}-to-{1}', parameters('vNets').vNet1.name, parameters('vNets').vNet2.name))]",
+        "vNet3ToVNet2": "[resourceId('Microsoft.Network/connections', format('{0}-to-{1}', parameters('vNets').vNet3.name, parameters('vNets').vNet2.name))]"
+      }
+    }
+  }
+}
