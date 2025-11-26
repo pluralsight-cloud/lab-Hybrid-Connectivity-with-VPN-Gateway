@@ -1,0 +1,184 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vNets": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": {
+          "name": "vnet1",
+          "vmSubnet": "subnet1"
+        },
+        "vNet2": {
+          "name": "vnet2",
+          "vmSubnet": "subnet1"
+        },
+        "vNet3": {
+          "name": "vnet3",
+          "vmSubnet": "subnet1"
+        }
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser"
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "defaultValue": "P@ssw0rd!123"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "defaultValue": "[toLower(format('st{0}', uniqueString(resourceGroup().id)))]"
+    },
+    "nsgNames": {
+      "type": "array",
+      "defaultValue": ["nsgmin001", "nsgmin002", "nsgmin003"]
+    }
+  },
+  "variables": {
+    "vmSku": "Standard_B1ms",
+    "imageReference": {
+      "publisher": "Canonical",
+      "offer": "0001-com-ubuntu-server-jammy",
+      "sku": "22_04-lts",
+      "version": "latest"
+    },
+    "vmConfigs": [
+      {
+        "name": "[format('{0}-vm', parameters('vNets').vNet1.name)]",
+        "vnetName": "[parameters('vNets').vNet1.name]",
+        "subnetName": "[parameters('vNets').vNet1.vmSubnet]"
+      },
+      {
+        "name": "[format('{0}-vm', parameters('vNets').vNet2.name)]",
+        "vnetName": "[parameters('vNets').vNet2.name]",
+        "subnetName": "[parameters('vNets').vNet2.vmSubnet]"
+      },
+      {
+        "name": "[format('{0}-vm', parameters('vNets').vNet3.name)]",
+        "vnetName": "[parameters('vNets').vNet3.name]",
+        "subnetName": "[parameters('vNets').vNet3.vmSubnet]"
+      }
+    ],
+    "nsgConfigs": [
+      {
+        "nsgName": "[parameters('nsgNames')[0]]"
+      },
+      {
+        "nsgName": "[parameters('nsgNames')[1]]"
+      },
+      {
+        "nsgName": "[parameters('nsgNames')[2]]"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/Allow-Ping', variables('nsgConfigs')[copyIndex('nsgRuleCopy')].nsgName)]",
+      "copy": {
+        "name": "nsgRuleCopy",
+        "count": "[length(variables('nsgConfigs'))]"
+      },
+      "properties": {
+        "protocol": "Icmp",
+        "sourcePortRange": "*",
+        "destinationPortRange": "*",
+        "sourceAddressPrefix": "*",
+        "destinationAddressPrefix": "*",
+        "access": "Allow",
+        "priority": 200,
+        "direction": "Inbound"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-nic', variables('vmConfigs')[copyIndex('nicCopy')].name)]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "nicCopy",
+        "count": "[length(variables('vmConfigs'))]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vmConfigs')[copyIndex('nicCopy')].vnetName, variables('vmConfigs')[copyIndex('nicCopy')].subnetName)]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2025-04-01",
+      "name": "[variables('vmConfigs')[copyIndex('vmCopy')].name]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "vmCopy",
+        "count": "[length(variables('vmConfigs'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-nic', variables('vmConfigs')[copyIndex('vmCopy')].name))]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('vmSku')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('vmConfigs')[copyIndex('vmCopy')].name]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": false
+          }
+        },
+        "storageProfile": {
+          "imageReference": "[variables('imageReference')]",
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "StandardSSD_LRS"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', format('{0}-nic', variables('vmConfigs')[copyIndex('vmCopy')].name))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": true,
+            "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-06-01').primaryEndpoints.blob]"
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "vmIds": {
+      "type": "object",
+      "value": {
+        "vNet1Vm": "[resourceId('Microsoft.Compute/virtualMachines', variables('vmConfigs')[0].name)]",
+        "vNet2Vm": "[resourceId('Microsoft.Compute/virtualMachines', variables('vmConfigs')[1].name)]",
+        "vNet3Vm": "[resourceId('Microsoft.Compute/virtualMachines', variables('vmConfigs')[2].name)]"
+      }
+    }
+  }
+}
