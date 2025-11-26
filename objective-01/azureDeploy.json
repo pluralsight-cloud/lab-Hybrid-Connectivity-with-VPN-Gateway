@@ -47,6 +47,10 @@
       "minLength": 3,
       "maxLength": 24,
       "defaultValue": "[toLower(format('st{0}', uniqueString(resourceGroup().id)))]"
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "[toLower(format('log-{0}', uniqueString(resourceGroup().id)))]"
     }
   },
   "variables": {
@@ -123,12 +127,30 @@
         "name": "Standard_LRS"
       },
       "properties": {}
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[parameters('logAnalyticsWorkspaceName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "PerGB2018"
+      },
+      "properties": {
+        "retentionInDays": 30,
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      }
     }
   ],
   "outputs": {
     "storageAccountId": {
       "type": "string",
       "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
     }
   }
 }
