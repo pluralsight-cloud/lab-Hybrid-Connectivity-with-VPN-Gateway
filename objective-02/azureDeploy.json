@@ -37,6 +37,16 @@
           ]
         }
       }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "defaultValue": "[toLower(format('st{0}', uniqueString(resourceGroup().id)))]"
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "[toLower(format('log-{0}', uniqueString(resourceGroup().id)))]"
     }
   },
   "variables": {
@@ -104,6 +114,35 @@
           "tier": "[variables('gatewaySku')]"
         },
         "vpnGatewayGeneration": "[variables('vpnGatewayGeneration')]"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "name": "[format('{0}-vng-diag', variables('vNetList')[copyIndex('vngDiagCopy')].name)]",
+      "scope": "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', variables('vNetList')[copyIndex('vngDiagCopy')].name))]",
+      "copy": {
+        "name": "vngDiagCopy",
+        "count": "[variables('vNetCount')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', variables('vNetList')[copyIndex('vngDiagCopy')].name))]"
+      ],
+      "properties": {
+        "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
       }
     }
   ],
