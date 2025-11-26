@@ -121,10 +121,6 @@
       "apiVersion": "2025-01-01",
       "name": "[format('{0}-to-{1}', parameters('vNets').vNet1.name, parameters('vNets').vNet2.name)]",
       "location": "[parameters('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet1)]",
-        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
-      ],
       "properties": {
         "virtualNetworkGateway1": {
           "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet1)]"
@@ -141,12 +137,44 @@
     {
       "type": "Microsoft.Network/connections",
       "apiVersion": "2025-01-01",
+      "name": "[format('{0}-to-{1}', parameters('vNets').vNet2.name, parameters('vNets').vNet1.name)]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "virtualNetworkGateway1": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
+        },
+        "virtualNetworkGateway2": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet1)]"
+        },
+        "connectionType": "Vnet2Vnet",
+        "sharedKey": "[parameters('sharedKey')]",
+        "enableBgp": true,
+        "usePolicyBasedTrafficSelectors": false
+      }
+    },
+    {
+      "type": "Microsoft.Network/connections",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-to-{1}', parameters('vNets').vNet2.name, parameters('vNets').vNet3.name)]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "virtualNetworkGateway1": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
+        },
+        "virtualNetworkGateway2": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet3)]"
+        },
+        "connectionType": "Vnet2Vnet",
+        "sharedKey": "[parameters('sharedKey')]",
+        "enableBgp": true,
+        "usePolicyBasedTrafficSelectors": false
+      }
+    },
+    {
+      "type": "Microsoft.Network/connections",
+      "apiVersion": "2025-01-01",
       "name": "[format('{0}-to-{1}', parameters('vNets').vNet3.name, parameters('vNets').vNet2.name)]",
       "location": "[parameters('location')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet3)]",
-        "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet2)]"
-      ],
       "properties": {
         "virtualNetworkGateway1": {
           "id": "[resourceId('Microsoft.Network/virtualNetworkGateways', variables('gatewayNames').vNet3)]"
