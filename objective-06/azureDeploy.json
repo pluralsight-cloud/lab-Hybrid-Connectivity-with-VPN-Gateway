@@ -77,7 +77,19 @@
       {
         "nsgName": "[parameters('nsgNames')[2]]"
       }
-    ]
+    ],
+    "ipConfigWithPip": {
+      "name": "ipconfig1",
+      "properties": {
+        "privateIPAllocationMethod": "Dynamic",
+        "publicIPAddress": {
+          "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', variables('vmConfigs')[0].name))]"
+        },
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vmConfigs')[0].vnetName, variables('vmConfigs')[0].subnetName)]"
+        }
+      }
+    }
   },
   "resources": [
     {
@@ -100,6 +112,34 @@
       }
     },
     {
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/Allow-SSH', variables('nsgConfigs')[0].nsgName)]",
+      "properties": {
+        "protocol": "Tcp",
+        "sourcePortRange": "*",
+        "destinationPortRange": "22",
+        "sourceAddressPrefix": "Internet",
+        "destinationAddressPrefix": "VirtualNetwork",
+        "access": "Allow",
+        "priority": 100,
+        "direction": "Inbound"
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-pip', variables('vmConfigs')[0].name)]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "publicIPAddressVersion": "IPv4"
+      }
+    },
+    {
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2025-01-01",
       "name": "[format('{0}-nic', variables('vmConfigs')[copyIndex('nicCopy')].name)]",
@@ -108,18 +148,11 @@
         "name": "nicCopy",
         "count": "[length(variables('vmConfigs'))]"
       },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', variables('vmConfigs')[0].name))]"
+      ],
       "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "privateIPAllocationMethod": "Dynamic",
-              "subnet": {
-                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vmConfigs')[copyIndex('nicCopy')].vnetName, variables('vmConfigs')[copyIndex('nicCopy')].subnetName)]"
-              }
-            }
-          }
-        ]
+        "ipConfigurations": "[if(equals(copyIndex('nicCopy'), 0), array(variables('ipConfigWithPip')), array(createObject('name', 'ipconfig1', 'properties', createObject('privateIPAllocationMethod', 'Dynamic', 'subnet', createObject('id', resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vmConfigs')[copyIndex('nicCopy')].vnetName, variables('vmConfigs')[copyIndex('nicCopy')].subnetName))))))]"
       }
     },
     {
