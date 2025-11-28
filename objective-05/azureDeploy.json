@@ -1,0 +1,170 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vNets": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": {
+          "name": "vnet1",
+          "existingAddressPrefixes": ["10.0.1.0/24"]
+        },
+        "vNet2": {
+          "name": "vnet2",
+          "existingAddressPrefixes": ["10.0.2.0/24"]
+        },
+        "vNet3": {
+          "name": "vnet3",
+          "existingAddressPrefixes": ["10.0.3.0/24"]
+        }
+      }
+    },
+    "additionalAddressSpaces": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": "10.1.1.0/24",
+        "vNet2": "10.1.2.0/24",
+        "vNet3": "10.1.3.0/24"
+      }
+    },
+    "additionalSubnets": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": [
+          { "name": "subnet3", "addressPrefix": "10.1.1.0/25" },
+          { "name": "subnet4", "addressPrefix": "10.1.1.128/25" }
+        ],
+        "vNet2": [
+          { "name": "subnet3", "addressPrefix": "10.1.2.0/25" },
+          { "name": "subnet4", "addressPrefix": "10.1.2.128/25" }
+        ],
+        "vNet3": [
+          { "name": "subnet3", "addressPrefix": "10.1.3.0/25" },
+          { "name": "subnet4", "addressPrefix": "10.1.3.128/25" }
+        ]
+      }
+    },
+    "nsgNames": {
+      "type": "array",
+      "defaultValue": ["nsgmin001", "nsgmin002", "nsgmin003"]
+    }
+  },
+  "variables": {
+    "vNetConfigs": [
+      {
+        "name": "[parameters('vNets').vNet1.name]",
+        "addressPrefixes": "[concat(parameters('vNets').vNet1.existingAddressPrefixes, array(parameters('additionalAddressSpaces').vNet1))]",
+        "subnets": "[parameters('additionalSubnets').vNet1]",
+        "nsgName": "[parameters('nsgNames')[0]]"
+      },
+      {
+        "name": "[parameters('vNets').vNet2.name]",
+        "addressPrefixes": "[concat(parameters('vNets').vNet2.existingAddressPrefixes, array(parameters('additionalAddressSpaces').vNet2))]",
+        "subnets": "[parameters('additionalSubnets').vNet2]",
+        "nsgName": "[parameters('nsgNames')[1]]"
+      },
+      {
+        "name": "[parameters('vNets').vNet3.name]",
+        "addressPrefixes": "[concat(parameters('vNets').vNet3.existingAddressPrefixes, array(parameters('additionalAddressSpaces').vNet3))]",
+        "subnets": "[parameters('additionalSubnets').vNet3]",
+        "nsgName": "[parameters('nsgNames')[2]]"
+      }
+    ],
+    "subnetConfigs": [
+      {
+        "vnetName": "[parameters('vNets').vNet1.name]",
+        "name": "[parameters('additionalSubnets').vNet1[0].name]",
+        "addressPrefix": "[parameters('additionalSubnets').vNet1[0].addressPrefix]",
+        "nsgName": "[parameters('nsgNames')[0]]"
+      },
+      {
+        "vnetName": "[parameters('vNets').vNet1.name]",
+        "name": "[parameters('additionalSubnets').vNet1[1].name]",
+        "addressPrefix": "[parameters('additionalSubnets').vNet1[1].addressPrefix]",
+        "nsgName": "[parameters('nsgNames')[0]]"
+      },
+      {
+        "vnetName": "[parameters('vNets').vNet2.name]",
+        "name": "[parameters('additionalSubnets').vNet2[0].name]",
+        "addressPrefix": "[parameters('additionalSubnets').vNet2[0].addressPrefix]",
+        "nsgName": "[parameters('nsgNames')[1]]"
+      },
+      {
+        "vnetName": "[parameters('vNets').vNet2.name]",
+        "name": "[parameters('additionalSubnets').vNet2[1].name]",
+        "addressPrefix": "[parameters('additionalSubnets').vNet2[1].addressPrefix]",
+        "nsgName": "[parameters('nsgNames')[1]]"
+      },
+      {
+        "vnetName": "[parameters('vNets').vNet3.name]",
+        "name": "[parameters('additionalSubnets').vNet3[0].name]",
+        "addressPrefix": "[parameters('additionalSubnets').vNet3[0].addressPrefix]",
+        "nsgName": "[parameters('nsgNames')[2]]"
+      },
+      {
+        "vnetName": "[parameters('vNets').vNet3.name]",
+        "name": "[parameters('additionalSubnets').vNet3[1].name]",
+        "addressPrefix": "[parameters('additionalSubnets').vNet3[1].addressPrefix]",
+        "nsgName": "[parameters('nsgNames')[2]]"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2025-01-01",
+      "name": "[variables('vNetConfigs')[copyIndex('vnetCopy')].name]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "vnetCopy",
+        "count": "[length(variables('vNetConfigs'))]"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": "[variables('vNetConfigs')[copyIndex('vnetCopy')].addressPrefixes]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}/{1}', variables('subnetConfigs')[copyIndex('subnetCopy')].vnetName, variables('subnetConfigs')[copyIndex('subnetCopy')].name)]",
+      "copy": {
+        "name": "subnetCopy",
+        "count": "[length(variables('subnetConfigs'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('subnetConfigs')[copyIndex('subnetCopy')].vnetName)]"
+      ],
+      "properties": {
+        "addressPrefix": "[variables('subnetConfigs')[copyIndex('subnetCopy')].addressPrefix]",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('subnetConfigs')[copyIndex('subnetCopy')].nsgName)]"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "additionalSubnetIds": {
+      "type": "object",
+      "value": {
+        "vNet1": {
+          "subnet3": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNet1.name, parameters('additionalSubnets').vNet1[0].name)]",
+          "subnet4": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNet1.name, parameters('additionalSubnets').vNet1[1].name)]"
+        },
+        "vNet2": {
+          "subnet3": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNet2.name, parameters('additionalSubnets').vNet2[0].name)]",
+          "subnet4": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNet2.name, parameters('additionalSubnets').vNet2[1].name)]"
+        },
+        "vNet3": {
+          "subnet3": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNet3.name, parameters('additionalSubnets').vNet3[0].name)]",
+          "subnet4": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNet3.name, parameters('additionalSubnets').vNet3[1].name)]"
+        }
+      }
+    }
+  }
+}
