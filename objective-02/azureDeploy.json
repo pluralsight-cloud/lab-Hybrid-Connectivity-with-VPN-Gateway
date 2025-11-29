@@ -1,0 +1,159 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vNets": {
+      "type": "object",
+      "defaultValue": {
+        "vNet1": {
+          "name": "vnet1",
+          "addressPrefixes": ["10.0.1.0/24"],
+          "subnets": [
+            { "name": "subnet1", "addressPrefix": "10.0.1.0/26" },
+            { "name": "subnet2", "addressPrefix": "10.0.1.64/26" },
+            { "name": "GatewaySubnet", "addressPrefix": "10.0.1.192/27" }
+          ]
+        },
+        "vNet2": {
+          "name": "vnet2",
+          "addressPrefixes": ["10.0.2.0/24"],
+          "subnets": [
+            { "name": "subnet1", "addressPrefix": "10.0.2.0/26" },
+            { "name": "subnet2", "addressPrefix": "10.0.2.64/26" },
+            { "name": "GatewaySubnet", "addressPrefix": "10.0.2.192/27" }
+          ]
+        },
+        "vNet3": {
+          "name": "vnet3",
+          "addressPrefixes": ["10.0.3.0/24"],
+          "subnets": [
+            { "name": "subnet1", "addressPrefix": "10.0.3.0/26" },
+            { "name": "subnet2", "addressPrefix": "10.0.3.64/26" },
+            { "name": "GatewaySubnet", "addressPrefix": "10.0.3.192/27" }
+          ]
+        }
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "defaultValue": "[toLower(format('st{0}', uniqueString(resourceGroup().id)))]"
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "[toLower(format('log-{0}', uniqueString(resourceGroup().id)))]"
+    }
+  },
+  "variables": {
+    "vNetList": [
+      "[parameters('vNets').vNet1]",
+      "[parameters('vNets').vNet2]",
+      "[parameters('vNets').vNet3]"
+    ],
+    "vNetCount": "[length(variables('vNetList'))]",
+    "gatewaySku": "VpnGw2",
+    "gatewayType": "Vpn",
+    "vpnType": "RouteBased",
+    "vpnGatewayGeneration": "Generation2"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-vng-pip', variables('vNetList')[copyIndex('pipCopy')].name)]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "pipCopy",
+        "count": "[variables('vNetCount')]"
+      },
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "publicIPAddressVersion": "IPv4"
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworkGateways",
+      "apiVersion": "2025-01-01",
+      "name": "[format('{0}-vng', variables('vNetList')[copyIndex('vngCopy')].name)]",
+      "location": "[parameters('location')]",
+      "copy": {
+        "name": "vngCopy",
+        "count": "[variables('vNetCount')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-vng-pip', variables('vNetList')[copyIndex('vngCopy')].name))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "default",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vNetList')[copyIndex('vngCopy')].name, 'GatewaySubnet')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-vng-pip', variables('vNetList')[copyIndex('vngCopy')].name))]"
+              }
+            }
+          }
+        ],
+        "gatewayType": "[variables('gatewayType')]",
+        "vpnType": "[variables('vpnType')]",
+        "activeActive": false,
+        "enableBgp": false,
+        "sku": {
+          "name": "[variables('gatewaySku')]",
+          "tier": "[variables('gatewaySku')]"
+        },
+        "vpnGatewayGeneration": "[variables('vpnGatewayGeneration')]"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "name": "[format('{0}-vng-diag', variables('vNetList')[copyIndex('vngDiagCopy')].name)]",
+      "scope": "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', variables('vNetList')[copyIndex('vngDiagCopy')].name))]",
+      "copy": {
+        "name": "vngDiagCopy",
+        "count": "[variables('vNetCount')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', variables('vNetList')[copyIndex('vngDiagCopy')].name))]"
+      ],
+      "properties": {
+        "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "vpnGatewayIds": {
+      "type": "object",
+      "value": {
+        "vNet1": "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', parameters('vNets').vNet1.name))]",
+        "vNet2": "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', parameters('vNets').vNet2.name))]",
+        "vNet3": "[resourceId('Microsoft.Network/virtualNetworkGateways', format('{0}-vng', parameters('vNets').vNet3.name))]"
+      }
+    }
+  }
+}
