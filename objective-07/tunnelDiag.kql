@@ -1,0 +1,9 @@
+AzureDiagnostics
+| where Category == "TunnelDiagnosticLog"
+| where OperationName in ("TunnelConnected", "TunnelDisconnected")
+| project TimeGenerated,
+          Resource = Resource,
+          TunnelType = tostring(tunnelType_s),
+          OperationName,
+          DisconnectReason = tostring(stateChangeReason_s)
+| order by TimeGenerated desc
