@@ -1,0 +1,117 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "[toLower(format('log-{0}', uniqueString(resourceGroup().id)))]"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for alert rules."
+      }
+    },
+    "evaluationFrequencyInMinutes": {
+      "type": "int",
+      "defaultValue": 5
+    },
+    "windowSizeInMinutes": {
+      "type": "int",
+      "defaultValue": 5
+    }
+  },
+  "variables": {
+    "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+    "alertDisconnectName": "vpn-tunnel-disconnected",
+    "alertConnectName": "vpn-tunnel-connected",
+    "disconnectQuery": "AzureDiagnostics\n| where Category == \"TunnelDiagnosticLog\"\n| where OperationName == \"TunnelDisconnected\"\n| project TimeGenerated, Resource, DisconnectReason=tostring(stateChangeReason_s)",
+    "connectQuery": "AzureDiagnostics\n| where Category == \"TunnelDiagnosticLog\"\n| where OperationName == \"TunnelConnected\"\n| project TimeGenerated, Resource"
+  },
+
+  "resources": [
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2025-01-01-preview",
+      "name": "[variables('alertDisconnectName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "description": "Alert when an Azure VPN tunnel is disconnected (TunnelDisconnected).",
+        "enabled": true,
+        "severity": 2,
+        "evaluationFrequency": "[format('PT{0}M', parameters('evaluationFrequencyInMinutes'))]",
+        "windowSize": "[format('PT{0}M', parameters('windowSizeInMinutes'))]",
+        "scopes": [
+          "[variables('workspaceId')]"
+        ],
+        "targetResourceTypes": [
+          "Microsoft.OperationalInsights/workspaces"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "[variables('disconnectQuery')]",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "autoMitigate": false,
+        "muteActionsDuration": "PT5M"
+      }
+    },
+
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2025-01-01-preview",
+      "name": "[variables('alertConnectName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "description": "Alert when an Azure VPN tunnel reconnects (TunnelConnected).",
+        "enabled": true,
+        "severity": 4,
+        "evaluationFrequency": "[format('PT{0}M', parameters('evaluationFrequencyInMinutes'))]",
+        "windowSize": "[format('PT{0}M', parameters('windowSizeInMinutes'))]",
+        "scopes": [
+          "[variables('workspaceId')]"
+        ],
+        "targetResourceTypes": [
+          "Microsoft.OperationalInsights/workspaces"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "[variables('connectQuery')]",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "autoMitigate": false,
+        "muteActionsDuration": "PT5M"
+      }
+    }
+  ],
+
+  "outputs": {
+    "disconnectAlertName": {
+      "type": "string",
+      "value": "[variables('alertDisconnectName')]"
+    },
+    "connectAlertName": {
+      "type": "string",
+      "value": "[variables('alertConnectName')]"
+    }
+  }
+}
